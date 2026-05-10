@@ -1,0 +1,106 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222"]
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  quotes-agent-1:
+    build: ./agents/quotes-agent
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=quotes-agent
+    depends_on:
+      - nats
+      - jaeger
+
+  quotes-agent-2:
+    build: ./agents/quotes-agent
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=quotes-agent
+    depends_on:
+      - nats
+      - jaeger
+
+  market-analyzer:
+    build: ./agents/market-analyzer
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=market-analyzer
+    depends_on:
+      - nats
+      - jaeger
+
+  risk-manager:
+    build: ./agents/risk-manager
+    environment:
+      - NATS_URL=nats://nats:4222
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=risk-manager
+    depends_on:
+      - nats
+      - redis
+      - jaeger
+
+  trade-executor:
+    build: ./agents/trade-executor
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=trade-executor
+    depends_on:
+      - nats
+      - jaeger
+
+  llm-analyst:
+    build: ./agents/llm-analyst
+    environment:
+      - NATS_URL=nats://nats:4222
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=llm-analyst
+    depends_on:
+      - nats
+      - jaeger
+
+  orchestrator:
+    build: ./orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=orchestrator
+    depends_on:
+      - nats
+      - jaeger
+
+  monitoring:
+    build: ./monitoring
+    ports:
+      - "8080:8080"
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8000
+    depends_on:
+      - orchestrator
