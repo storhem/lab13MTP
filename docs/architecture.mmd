@@ -1,0 +1,40 @@
+flowchart TD
+    Client([HTTP Client]) -->|POST /trade| API[FastAPI Orchestrator\n:8000]
+
+    API --> Pipeline[TradingPipeline]
+    API --> Auction[AuctionManager]
+    API --> Scaler[DynamicScaler]
+
+    Pipeline -->|trading.quotes.collect| NATS[(NATS\nBroker)]
+    NATS -->|queue group| QA1[quotes-agent-1\nGo]
+    NATS -->|queue group| QA2[quotes-agent-2\nGo]
+
+    QA1 -->|trading.quotes.done| NATS
+    QA2 -->|trading.quotes.done| NATS
+
+    NATS -->|trading.quotes.done| Pipeline
+    Pipeline -->|trading.market.analyze| NATS
+    NATS --> MA[market-analyzer\nGo]
+    MA -->|trading.market.done| NATS
+
+    NATS -->|trading.market.done| Pipeline
+    Pipeline -->|trading.risk.assess| NATS
+    NATS --> RM[risk-manager\nGo]
+    RM <-->|state| Redis[(Redis\n:6379)]
+    RM -->|trading.risk.done| NATS
+
+    NATS -->|trading.risk.done| Pipeline
+    Pipeline -->|trading.trade.execute| NATS
+    NATS --> TE[trade-executor\nGo]
+    TE -->|trading.trade.done| NATS
+
+    NATS -->|trading.trade.done| Pipeline
+    Pipeline -->|trading.llm.analyze| NATS
+    NATS --> LLM[llm-analyst\nPython+Gemini]
+    LLM -->|trading.llm.done| NATS
+
+    All[All agents] -->|traces| Jaeger[(Jaeger\n:16686)]
+
+    Monitoring[Monitoring\n:8080] -->|HTTP| API
+
+    Scaler -->|Docker API| Docker[(Docker\nEngine)]
