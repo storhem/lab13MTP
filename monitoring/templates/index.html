@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Торговая платформа — Мониторинг</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f1117;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            padding: 1.5rem 2rem;
+            border-bottom: 2px solid #4a5568;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 { font-size: 1.6rem; color: #63b3ed; }
+        header .badge {
+            background: #2f855a;
+            color: #c6f6d5;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+        }
+
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: #1a202c;
+            border: 1px solid #2d3748;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-card .value { font-size: 2rem; font-weight: 700; color: #63b3ed; }
+        .stat-card .label { font-size: 0.8rem; color: #a0aec0; margin-top: 0.25rem; }
+
+        h2 { font-size: 1.2rem; color: #90cdf4; margin-bottom: 1rem; }
+
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .agent-card {
+            background: #1a202c;
+            border: 1px solid #2d3748;
+            border-radius: 0.75rem;
+            padding: 1rem;
+        }
+
+        .agent-card .agent-name { font-weight: 600; color: #e2e8f0; margin-bottom: 0.4rem; }
+        .agent-card .agent-topic { font-size: 0.75rem; color: #718096; word-break: break-all; }
+        .agent-card .agent-type {
+            display: inline-block;
+            margin-top: 0.5rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .type-go   { background: #2b6cb0; color: #bee3f8; }
+        .type-python { background: #276749; color: #c6f6d5; }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .dot-ok     { background: #48bb78; }
+        .dot-unknown { background: #ed8936; }
+
+        /* Trade form */
+        .trade-section {
+            background: #1a202c;
+            border: 1px solid #2d3748;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .trade-section h2 { margin-bottom: 1rem; }
+
+        .form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
+
+        label { font-size: 0.85rem; color: #a0aec0; display: block; margin-bottom: 0.3rem; }
+
+        input[type="text"] {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 0.4rem;
+            color: #e2e8f0;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.9rem;
+            width: 280px;
+            outline: none;
+        }
+
+        input[type="text"]:focus { border-color: #63b3ed; }
+
+        button {
+            background: #3182ce;
+            color: #fff;
+            border: none;
+            border-radius: 0.4rem;
+            padding: 0.55rem 1.25rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #2b6cb0; }
+        button:disabled { background: #4a5568; cursor: not-allowed; }
+
+        #result-box {
+            margin-top: 1rem;
+            background: #171923;
+            border: 1px solid #2d3748;
+            border-radius: 0.4rem;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #68d391;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 420px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        #spinner {
+            display: none;
+            color: #a0aec0;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        footer {
+            text-align: center;
+            color: #4a5568;
+            font-size: 0.75rem;
+            padding: 2rem 0 1rem;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Торговая платформа — Мониторинг агентов</h1>
+    <span class="badge">
+        <span class="status-dot {{ 'dot-ok' if orchestrator_status == 'healthy' else 'dot-unknown' }}"></span>
+        Оркестратор: {{ orchestrator_status }}
+    </span>
+</header>
+
+<div class="container">
+    <!-- Stats row -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="value">{{ agents | length }}</div>
+            <div class="label">Всего агентов</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{{ agents | selectattr('type', 'equalto', 'go') | list | length }}</div>
+            <div class="label">Go-агентов</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{{ agents | selectattr('type', 'equalto', 'python') | list | length }}</div>
+            <div class="label">Python-агентов</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{{ queue_length }}</div>
+            <div class="label">Длина очереди</div>
+        </div>
+    </div>
+
+    <!-- Agents grid -->
+    <h2>Активные агенты</h2>
+    <div class="agents-grid">
+        {% for agent in agents %}
+        <div class="agent-card">
+            <div class="agent-name">
+                <span class="status-dot dot-ok"></span>{{ agent.name }}
+            </div>
+            <div class="agent-topic">{{ agent.topic }}</div>
+            <span class="agent-type {{ 'type-go' if agent.type == 'go' else 'type-python' }}">
+                {{ agent.type | upper }}
+            </span>
+        </div>
+        {% else %}
+        <p style="color:#718096">Нет данных об агентах</p>
+        {% endfor %}
+    </div>
+
+    <!-- Trade form -->
+    <div class="trade-section">
+        <h2>Запустить торговую операцию</h2>
+        <div class="form-row">
+            <div>
+                <label for="symbols-input">Тикеры (через запятую)</label>
+                <input type="text" id="symbols-input" placeholder="AAPL, GOOGL, TSLA" value="AAPL, GOOGL" />
+            </div>
+            <button id="trade-btn" onclick="executeTrade()">Выполнить</button>
+        </div>
+        <div id="spinner">Выполняется pipeline...</div>
+        <pre id="result-box"></pre>
+    </div>
+</div>
+
+<footer>Лабораторная работа №13, Вариант 7 — Евланичев Максим Юрьевич, группа 221131</footer>
+
+<script>
+    const ORCHESTRATOR = "{{ orchestrator_url }}";
+
+    async function executeTrade() {
+        const btn = document.getElementById("trade-btn");
+        const spinner = document.getElementById("spinner");
+        const resultBox = document.getElementById("result-box");
+        const symbolsRaw = document.getElementById("symbols-input").value;
+
+        const symbols = symbolsRaw.split(",").map(s => s.trim()).filter(Boolean);
+        if (symbols.length === 0) {
+            alert("Введите хотя бы один тикер");
+            return;
+        }
+
+        btn.disabled = true;
+        spinner.style.display = "block";
+        resultBox.style.display = "none";
+        resultBox.textContent = "";
+
+        try {
+            const resp = await fetch(ORCHESTRATOR + "/trade", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbols }),
+            });
+            const data = await resp.json();
+            resultBox.textContent = JSON.stringify(data, null, 2);
+            resultBox.style.display = "block";
+        } catch (err) {
+            resultBox.textContent = "Ошибка: " + err.message;
+            resultBox.style.display = "block";
+        } finally {
+            btn.disabled = false;
+            spinner.style.display = "none";
+        }
+    }
+</script>
+</body>
+</html>
