@@ -36,9 +36,9 @@ type outgoingMsg struct {
 
 // MarketAnalyzerAgent analyses market quotes and produces recommendations.
 type MarketAnalyzerAgent struct {
+	processedCount int64 // first field for 32-bit atomic alignment
 	nc             *nats.Conn
 	tracer         trace.Tracer
-	processedCount int64
 }
 
 // NewMarketAnalyzerAgent creates a new MarketAnalyzerAgent.
@@ -84,41 +84,7 @@ func (a *MarketAnalyzerAgent) handleMessage(ctx context.Context, msg *nats.Msg) 
 		return
 	}
 
-	// Compute aggregates
-	var totalPrice float64
-	var totalVolume int64
-	for _, q := range in.Quotes {
-		totalPrice += q.Price
-		totalVolume += q.Volume
-	}
-	avgPrice := totalPrice / float64(len(in.Quotes))
-
-	// Trend: compare last vs first quote price
-	firstPrice := in.Quotes[0].Price
-	lastPrice := in.Quotes[len(in.Quotes)-1].Price
-	trend := "neutral"
-	if lastPrice > firstPrice {
-		trend = "bullish"
-	} else if lastPrice < firstPrice {
-		trend = "bearish"
-	}
-
-	// Recommendation
-	recommendation := "HOLD"
-	if trend == "bullish" && totalVolume > 50000 {
-		recommendation = "BUY"
-	} else if trend == "bearish" {
-		recommendation = "SELL"
-	}
-
-	out := outgoingMsg{
-		TaskID:         in.TaskID,
-		AvgPrice:       roundFloat(avgPrice, 2),
-		Trend:          trend,
-		TotalVolume:    totalVolume,
-		Recommendation: recommendation,
-		Status:         "ok",
-	}
+	out := analyzeQuotes(in.TaskID, in.Quotes)
 
 	data, err := json.Marshal(out)
 	if err != nil {
@@ -132,7 +98,43 @@ func (a *MarketAnalyzerAgent) handleMessage(ctx context.Context, msg *nats.Msg) 
 	}
 
 	atomic.AddInt64(&a.processedCount, 1)
-	log.Printf("[INFO] Published market.done task_id=%s trend=%s recommendation=%s", in.TaskID, trend, recommendation)
+	log.Printf("[INFO] Published market.done task_id=%s trend=%s recommendation=%s", in.TaskID, out.Trend, out.Recommendation)
+}
+
+// analyzeQuotes computes market metrics and a trading recommendation from quotes.
+func analyzeQuotes(taskID string, quotes []QuoteEntry) outgoingMsg {
+	var totalPrice float64
+	var totalVolume int64
+	for _, q := range quotes {
+		totalPrice += q.Price
+		totalVolume += q.Volume
+	}
+	avgPrice := totalPrice / float64(len(quotes))
+
+	firstPrice := quotes[0].Price
+	lastPrice := quotes[len(quotes)-1].Price
+	trend := "neutral"
+	if lastPrice > firstPrice {
+		trend = "bullish"
+	} else if lastPrice < firstPrice {
+		trend = "bearish"
+	}
+
+	recommendation := "HOLD"
+	if trend == "bullish" && totalVolume > 50000 {
+		recommendation = "BUY"
+	} else if trend == "bearish" {
+		recommendation = "SELL"
+	}
+
+	return outgoingMsg{
+		TaskID:         taskID,
+		AvgPrice:       roundFloat(avgPrice, 2),
+		Trend:          trend,
+		TotalVolume:    totalVolume,
+		Recommendation: recommendation,
+		Status:         "ok",
+	}
 }
 
 func roundFloat(val float64, precision int) float64 {

@@ -30,12 +30,19 @@ type outgoingMsg struct {
 	Status    string  `json:"status"`
 }
 
+// stateStore abstracts Redis persistence to allow unit testing without Redis.
+type stateStore interface {
+	IncrementTotal(ctx context.Context) error
+	IncrementHighRisk(ctx context.Context) error
+	SaveLastRisk(ctx context.Context, taskID, level string) error
+}
+
 // RiskManagerAgent assesses trade risk and persists state to Redis.
 type RiskManagerAgent struct {
+	processedCount int64 // first field for 32-bit atomic alignment
 	nc             *nats.Conn
 	tracer         trace.Tracer
-	state          *state.RiskState
-	processedCount int64
+	state          stateStore
 }
 
 // NewRiskManagerAgent creates a new RiskManagerAgent.
@@ -81,17 +88,7 @@ func (a *RiskManagerAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 	log.Printf("[INFO] Received risk.assess task_id=%s recommendation=%s avg_price=%.2f total_volume=%d",
 		in.TaskID, in.Recommendation, in.AvgPrice, in.TotalVolume)
 
-	// Risk assessment logic
-	riskLevel := "LOW"
-	approved := true
-
-	if in.Recommendation == "BUY" && in.AvgPrice > 800 {
-		riskLevel = "HIGH"
-		approved = false
-	} else if in.Recommendation == "BUY" && in.TotalVolume < 5000 {
-		riskLevel = "MEDIUM"
-		approved = true
-	}
+	riskLevel, approved := assessRisk(in.Recommendation, in.AvgPrice, in.TotalVolume)
 
 	// Simulated ML risk score (0..1)
 	riskScore := rand.Float64()
@@ -130,6 +127,20 @@ func (a *RiskManagerAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 
 	atomic.AddInt64(&a.processedCount, 1)
 	log.Printf("[INFO] Published risk.done task_id=%s risk_level=%s approved=%v", in.TaskID, riskLevel, approved)
+}
+
+// assessRisk determines risk level and trade approval from market data.
+func assessRisk(recommendation string, avgPrice float64, totalVolume int64) (riskLevel string, approved bool) {
+	riskLevel = "LOW"
+	approved = true
+	if recommendation == "BUY" && avgPrice > 800 {
+		riskLevel = "HIGH"
+		approved = false
+	} else if recommendation == "BUY" && totalVolume < 5000 {
+		riskLevel = "MEDIUM"
+		approved = true
+	}
+	return
 }
 
 func roundFloat(val float64, precision int) float64 {

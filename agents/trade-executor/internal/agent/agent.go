@@ -31,9 +31,9 @@ type outgoingMsg struct {
 
 // TradeExecutorAgent executes (or rejects) trades based on risk assessment results.
 type TradeExecutorAgent struct {
+	processedCount int64 // first field for 32-bit atomic alignment
 	nc             *nats.Conn
 	tracer         trace.Tracer
-	processedCount int64
 }
 
 // NewTradeExecutorAgent creates a new TradeExecutorAgent.
@@ -75,27 +75,7 @@ func (a *TradeExecutorAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 	log.Printf("[INFO] Received trade.execute task_id=%s recommendation=%s approved=%v risk_level=%s",
 		in.TaskID, in.Recommendation, in.Approved, in.RiskLevel)
 
-	var out outgoingMsg
-	out.TaskID = in.TaskID
-
-	if !in.Approved {
-		out.Status = "REJECTED"
-		out.Message = "Trade rejected due to risk assessment"
-		out.OrderID = nil
-		out.ExecutionPrice = nil
-	} else {
-		// Simulate trade execution
-		orderID := newUUID()
-		// Small random deviation around a base price (100–1000)
-		basePrice := 100.0 + rand.Float64()*900.0
-		deviation := (rand.Float64() - 0.5) * 5.0 // ±2.5
-		execPrice := roundFloat(basePrice+deviation, 2)
-
-		out.Status = "EXECUTED"
-		out.OrderID = &orderID
-		out.ExecutionPrice = &execPrice
-		out.Message = fmt.Sprintf("Order %s executed for %v at %.2f", orderID, in.Symbols, execPrice)
-	}
+	out := buildResult(in.TaskID, in.Approved, in.Symbols)
 
 	data, err := json.Marshal(out)
 	if err != nil {
@@ -110,6 +90,26 @@ func (a *TradeExecutorAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 
 	atomic.AddInt64(&a.processedCount, 1)
 	log.Printf("[INFO] Published trade.done task_id=%s status=%s", in.TaskID, out.Status)
+}
+
+// buildResult constructs the trade execution result without side effects.
+func buildResult(taskID string, approved bool, symbols []string) outgoingMsg {
+	var out outgoingMsg
+	out.TaskID = taskID
+	if !approved {
+		out.Status = "REJECTED"
+		out.Message = "Trade rejected due to risk assessment"
+	} else {
+		orderID := newUUID()
+		basePrice := 100.0 + rand.Float64()*900.0
+		deviation := (rand.Float64() - 0.5) * 5.0
+		execPrice := roundFloat(basePrice+deviation, 2)
+		out.Status = "EXECUTED"
+		out.OrderID = &orderID
+		out.ExecutionPrice = &execPrice
+		out.Message = fmt.Sprintf("Order %s executed for %v at %.2f", orderID, symbols, execPrice)
+	}
+	return out
 }
 
 // newUUID generates a simple UUID-like string using random bytes.

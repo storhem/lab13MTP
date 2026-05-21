@@ -37,9 +37,9 @@ type outgoingMsg struct {
 
 // QuotesAgent subscribes to trading.quotes.collect and publishes collected quotes.
 type QuotesAgent struct {
+	processedCount int64 // first field for 32-bit atomic alignment
 	nc             *nats.Conn
 	tracer         trace.Tracer
-	processedCount int64
 }
 
 // NewQuotesAgent creates a new QuotesAgent.
@@ -84,17 +84,7 @@ func (a *QuotesAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 
 	log.Printf("[INFO] Received quotes request task_id=%s symbols=%v", in.TaskID, in.Symbols)
 
-	quotes := make([]QuoteEntry, 0, len(in.Symbols))
-	for _, sym := range in.Symbols {
-		price := 100.0 + rand.Float64()*900.0    // 100 – 1000
-		volume := int64(1000 + rand.Intn(99001)) // 1000 – 100000
-		quotes = append(quotes, QuoteEntry{
-			Symbol:    sym,
-			Price:     roundFloat(price, 2),
-			Volume:    volume,
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		})
-	}
+	quotes := generateQuotes(in.Symbols)
 
 	out := outgoingMsg{
 		TaskID: in.TaskID,
@@ -115,6 +105,27 @@ func (a *QuotesAgent) handleMessage(ctx context.Context, msg *nats.Msg) {
 
 	atomic.AddInt64(&a.processedCount, 1)
 	log.Printf("[INFO] Published quotes.done task_id=%s count=%d", in.TaskID, atomic.LoadInt64(&a.processedCount))
+}
+
+// generateQuote generates a single random market quote for the given symbol.
+func generateQuote(symbol string) QuoteEntry {
+	price := 100.0 + rand.Float64()*900.0
+	volume := int64(1000 + rand.Intn(99001))
+	return QuoteEntry{
+		Symbol:    symbol,
+		Price:     roundFloat(price, 2),
+		Volume:    volume,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// generateQuotes creates a quote for each symbol in the slice.
+func generateQuotes(symbols []string) []QuoteEntry {
+	quotes := make([]QuoteEntry, 0, len(symbols))
+	for _, sym := range symbols {
+		quotes = append(quotes, generateQuote(sym))
+	}
+	return quotes
 }
 
 func roundFloat(val float64, precision int) float64 {
