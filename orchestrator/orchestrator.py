@@ -59,7 +59,7 @@ class Orchestrator:
         task_id = payload.get("task_id", str(uuid.uuid4()))
         payload["task_id"] = task_id
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future = loop.create_future()
         self.pending[task_id] = future
 

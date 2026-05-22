@@ -22,7 +22,7 @@ class GeminiClient:
 Дай краткий профессиональный комментарий на русском языке."""
 
         try:
-            response = self.model.generate_content(prompt)
+            response = await self.model.generate_content_async(prompt)
             return response.text
         except Exception as e:
             return f"Анализ недоступен: {str(e)}"

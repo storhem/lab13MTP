@@ -150,8 +150,8 @@ docker compose up --build
 
 | Сервис | URL |
 |--------|-----|
-| Оркестратор (REST API) | http://localhost:8000 |
-| Swagger UI | http://localhost:8000/docs |
+| Оркестратор (REST API) | http://localhost:8001 |
+| Swagger UI | http://localhost:8001/docs |
 | Веб-мониторинг | http://localhost:8080 |
 | Jaeger (трейсы) | http://localhost:16686 |
 | NATS Management | http://localhost:8222 |
