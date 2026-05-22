@@ -15,9 +15,21 @@ class Orchestrator:
         self._subscriptions = []
         self.logger = logging.getLogger("orchestrator")
 
-    async def connect(self):
-        self.nc = await nats.connect(self.nats_url)
-        self.logger.info(f"Connected to NATS: {self.nats_url}")
+    async def connect(self, max_retries: int = 10, retry_delay: float = 2.0):
+        for attempt in range(max_retries):
+            try:
+                self.nc = await nats.connect(self.nats_url)
+                self.logger.info(f"Connected to NATS: {self.nats_url}")
+                return
+            except Exception as exc:
+                if attempt < max_retries - 1:
+                    self.logger.warning(
+                        f"NATS connection attempt {attempt + 1}/{max_retries} failed: {exc}. "
+                        f"Retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    raise RuntimeError(f"Failed to connect to NATS after {max_retries} attempts") from exc
 
     async def close(self):
         if self.nc:
